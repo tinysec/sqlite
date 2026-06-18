@@ -4,13 +4,14 @@
 [![SQLite 3.53.2](https://img.shields.io/badge/SQLite-3.53.2-blue)](https://github.com/tinysec/sqlite/releases/tag/v3.53.2)
 [![Release alias](https://img.shields.io/badge/release-v3.53.2-green)](https://github.com/tinysec/sqlite/releases/tag/v3.53.2)
 
-This repository packages SQLite 3.53.2 as CMake-consumable static and shared
-libraries for Windows and Linux. It is intended for projects that need SQLite as
-a direct CMake dependency, including Windows Driver Kit 7.1 based builds.
+This repository packages the SQLite 3.53.2 amalgamation (`sqlite3.c` and
+`sqlite3.h`) as CMake-consumable static and shared libraries for Windows and
+Linux. It is intended for projects that need SQLite as a direct CMake
+dependency, including Windows Driver Kit 7.1 based builds.
 
-The build does not compile SQLite command-line tools by default in CI release
-artifacts. Release assets contain only headers, libraries, DLLs/shared objects,
-and the upstream SQLite license notice.
+The build never compiles SQLite command-line tools or source-generation tools.
+Release assets contain only headers, libraries, DLLs/shared objects, and the
+upstream SQLite license notice.
 
 ## License
 
@@ -25,6 +26,7 @@ terms. See [LICENSE.md](LICENSE.md) and the upstream SQLite copyright page:
 - Static library and DLL/shared library targets.
 - Modern Visual Studio, WDK7, and Linux builds.
 - CMake `FetchContent` and `add_subdirectory` consumption.
+- Always builds from the checked-in amalgamation, not from `src/`.
 - CI matrix artifacts for x64 and x86.
 - Immutable releases named `v3.53.2.<buildnumber>`.
 - Rolling release alias `v3.53.2` that points to the latest build.
@@ -46,8 +48,6 @@ Useful options:
 | Option | Default | Description |
 | --- | --- | --- |
 | `SQLITE_BUILD_SHARED` | `OFF` | Also build `sqlite3` DLL/shared library. |
-| `SQLITE_BUILD_TOOLS` | `ON` | Build source-generation tools when pregenerated sources are not used. |
-| `SQLITE_USE_PREGENERATED` | `ON` when `sqlite3.c` and `sqlite3.h` exist | Use checked-in amalgamation files. |
 | `SQLITE_BUILD_NUMBER` | `0` | Forms `3.53.2.<buildnumber>`. |
 
 ## Use From Source

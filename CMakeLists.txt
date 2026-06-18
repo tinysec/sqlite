@@ -35,7 +35,6 @@ option(SQLITE_ENABLE_RTREE "Enable RTree in the amalgamation build" ON)
 option(SQLITE_ENABLE_SESSION "Enable session extension APIs" ON)
 option(SQLITE_ENABLE_COLUMN_METADATA "Enable column metadata APIs" ON)
 option(SQLITE_OMIT_LOAD_EXTENSION "Omit runtime extension loading" OFF)
-option(SQLITE_BUILD_TOOLS "Build SQLite source-generation tools" ON)
 
 set(_sqlite_wdk7_default_mode "")
 set(_sqlite_wdk7_default_mode_is_kernel OFF)
@@ -58,240 +57,17 @@ if(SQLITE_KERNEL_MODE AND NOT WDK7)
     message(FATAL_ERROR "SQLITE_KERNEL_MODE is currently supported only with cmake/wdk7.cmake")
 endif()
 
-set(SQLITE_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-set(SQLITE_TSRC_DIR "${SQLITE_GENERATED_DIR}/tsrc")
-file(MAKE_DIRECTORY "${SQLITE_GENERATED_DIR}")
+set(SQLITE_AMALGAMATION_C "${CMAKE_CURRENT_SOURCE_DIR}/sqlite3.c")
+set(SQLITE_AMALGAMATION_H "${CMAKE_CURRENT_SOURCE_DIR}/sqlite3.h")
 
-set(_sqlite_use_pregenerated_default OFF)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sqlite3.c"
-        AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sqlite3.h")
-    set(_sqlite_use_pregenerated_default ON)
+if(NOT EXISTS "${SQLITE_AMALGAMATION_C}" OR NOT EXISTS "${SQLITE_AMALGAMATION_H}")
+    message(FATAL_ERROR "This package builds from checked-in sqlite3.c and sqlite3.h only")
 endif()
-option(SQLITE_USE_PREGENERATED
-    "Use checked-in sqlite3.c/sqlite3.h instead of generating the amalgamation"
-    "${_sqlite_use_pregenerated_default}")
-
-if(SQLITE_USE_PREGENERATED)
-    set(SQLITE_AMALGAMATION_C "${CMAKE_CURRENT_SOURCE_DIR}/sqlite3.c")
-    set(SQLITE_AMALGAMATION_H "${CMAKE_CURRENT_SOURCE_DIR}/sqlite3.h")
-
-    if(NOT EXISTS "${SQLITE_AMALGAMATION_C}" OR NOT EXISTS "${SQLITE_AMALGAMATION_H}")
-        message(FATAL_ERROR
-            "SQLITE_USE_PREGENERATED requires sqlite3.c and sqlite3.h in the source root")
-    endif()
-
-    add_custom_target(sqlite_amalgamation
-        DEPENDS
-            "${SQLITE_AMALGAMATION_C}"
-            "${SQLITE_AMALGAMATION_H}")
-else()
-file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" SQLITE_SOURCE_DIR_TCL)
-file(TO_CMAKE_PATH "${SQLITE_GENERATED_DIR}" SQLITE_GENERATED_DIR_TCL)
-
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/tool/mksqlite3h.tcl" _sqlite_mksqlite3h_tcl)
-string(REGEX REPLACE
-    "\\[file normalize \\$TOP/VERSION\\]"
-    [=[$TOP/VERSION]=]
-    _sqlite_mksqlite3h_tcl
-    "${_sqlite_mksqlite3h_tcl}")
-file(WRITE "${SQLITE_GENERATED_DIR}/mksqlite3h-cmake.tcl" "${_sqlite_mksqlite3h_tcl}")
-
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/ext/fts5/tool/mkfts5c.tcl" _sqlite_mkfts5c_tcl)
-string(REGEX REPLACE
-    "set srcdir \\[file dirname \\[file dirname \\[file normalize \\[info script\\]\\]\\]\\]"
-    "set srcdir \"${SQLITE_SOURCE_DIR_TCL}/ext/fts5\""
-    _sqlite_mkfts5c_tcl
-    "${_sqlite_mkfts5c_tcl}")
-file(WRITE "${SQLITE_GENERATED_DIR}/mkfts5c-cmake.tcl" "${_sqlite_mkfts5c_tcl}")
-
-add_executable(sqlite_jimsh EXCLUDE_FROM_ALL "autosetup/jimsh0.c")
-add_executable(sqlite_lemon EXCLUDE_FROM_ALL "tool/lemon.c")
-add_executable(sqlite_mkkeywordhash EXCLUDE_FROM_ALL "tool/mkkeywordhash.c")
-add_executable(sqlite_mksourceid EXCLUDE_FROM_ALL "tool/mksourceid.c")
-add_executable(sqlite_src_verify EXCLUDE_FROM_ALL "tool/src-verify.c")
-
-if(WDK7)
-    enable_language(CXX)
-    set_source_files_properties("autosetup/jimsh0.c" PROPERTIES LANGUAGE CXX)
-    target_compile_definitions(sqlite_jimsh PRIVATE ETIMEDOUT=10060 snprintf=_snprintf)
-endif()
-
-if(MSVC)
-    foreach(_sqlite_tool
-            sqlite_jimsh
-            sqlite_lemon
-            sqlite_mkkeywordhash
-            sqlite_mksourceid
-            sqlite_src_verify)
-        target_compile_options("${_sqlite_tool}" PRIVATE /W3)
-    endforeach()
-endif()
-
-add_custom_command(
-    OUTPUT
-        "${SQLITE_GENERATED_DIR}/parse.c"
-        "${SQLITE_GENERATED_DIR}/parse.h"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/parse.y"
-        "${SQLITE_GENERATED_DIR}/parse.y"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/tool/lempar.c"
-        "${SQLITE_GENERATED_DIR}/lempar.c"
-    COMMAND sqlite_lemon -S parse.y
-    DEPENDS sqlite_lemon "src/parse.y" "tool/lempar.c"
-    WORKING_DIRECTORY "${SQLITE_GENERATED_DIR}"
-    VERBATIM)
-
-add_custom_command(
-    OUTPUT "${SQLITE_GENERATED_DIR}/opcodes.h"
-    COMMAND "${CMAKE_COMMAND}"
-        -DSQLITE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-        -DSQLITE_BINARY_DIR=${SQLITE_GENERATED_DIR}
-        -DSQLITE_JIMSH=$<TARGET_FILE:sqlite_jimsh>
-        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateOpcodesHeader.cmake"
-    DEPENDS
-        sqlite_jimsh
-        "${SQLITE_GENERATED_DIR}/parse.h"
-        "src/vdbe.c"
-        "tool/mkopcodeh.tcl"
-    VERBATIM)
-
-add_custom_command(
-    OUTPUT "${SQLITE_GENERATED_DIR}/opcodes.c"
-    COMMAND sqlite_jimsh
-        "${CMAKE_CURRENT_SOURCE_DIR}/tool/mkopcodec.tcl"
-        "${SQLITE_GENERATED_DIR}/opcodes.h"
-        > "${SQLITE_GENERATED_DIR}/opcodes.c"
-    DEPENDS
-        sqlite_jimsh
-        "${SQLITE_GENERATED_DIR}/opcodes.h"
-        "tool/mkopcodec.tcl"
-    VERBATIM)
-
-add_custom_command(
-    OUTPUT "${SQLITE_GENERATED_DIR}/pragma.h"
-    COMMAND sqlite_jimsh
-        "${CMAKE_CURRENT_SOURCE_DIR}/tool/mkpragmatab.tcl"
-    DEPENDS sqlite_jimsh "tool/mkpragmatab.tcl"
-    WORKING_DIRECTORY "${SQLITE_GENERATED_DIR}"
-    VERBATIM)
-
-add_custom_command(
-    OUTPUT "${SQLITE_GENERATED_DIR}/ctime.c"
-    COMMAND sqlite_jimsh
-        "${CMAKE_CURRENT_SOURCE_DIR}/tool/mkctimec.tcl"
-    DEPENDS sqlite_jimsh "tool/mkctimec.tcl"
-    WORKING_DIRECTORY "${SQLITE_GENERATED_DIR}"
-    VERBATIM)
-
-add_custom_command(
-    OUTPUT "${SQLITE_GENERATED_DIR}/keywordhash.h"
-    COMMAND sqlite_mkkeywordhash > "${SQLITE_GENERATED_DIR}/keywordhash.h"
-    DEPENDS sqlite_mkkeywordhash
-    VERBATIM)
-
-add_custom_command(
-    OUTPUT "${SQLITE_GENERATED_DIR}/sqlite3.h"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "$<TARGET_FILE:sqlite_mksourceid>"
-        "${SQLITE_GENERATED_DIR}/mksourceid.exe"
-    COMMAND sqlite_jimsh
-        "${SQLITE_GENERATED_DIR}/mksqlite3h-cmake.tcl"
-        "${SQLITE_SOURCE_DIR_TCL}"
-        -o "${SQLITE_GENERATED_DIR}/sqlite3.h"
-    DEPENDS
-        sqlite_jimsh
-        sqlite_mksourceid
-        "src/sqlite.h.in"
-        "manifest"
-        "manifest.uuid"
-        "VERSION"
-        "tool/mksqlite3h.tcl"
-    WORKING_DIRECTORY "${SQLITE_GENERATED_DIR}"
-    VERBATIM)
-
-add_custom_command(
-    OUTPUT
-        "${SQLITE_GENERATED_DIR}/fts5parse.c"
-        "${SQLITE_GENERATED_DIR}/fts5parse.h"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/ext/fts5/fts5parse.y"
-        "${SQLITE_GENERATED_DIR}/fts5parse.y"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/tool/lempar.c"
-        "${SQLITE_GENERATED_DIR}/lempar.c"
-    COMMAND sqlite_lemon -S fts5parse.y
-    DEPENDS sqlite_lemon "ext/fts5/fts5parse.y" "tool/lempar.c"
-    WORKING_DIRECTORY "${SQLITE_GENERATED_DIR}"
-    VERBATIM)
-
-set(_sqlite_fts5_sources
-    "ext/fts5/fts5.h"
-    "ext/fts5/fts5Int.h"
-    "ext/fts5/fts5_aux.c"
-    "ext/fts5/fts5_buffer.c"
-    "ext/fts5/fts5_config.c"
-    "ext/fts5/fts5_expr.c"
-    "ext/fts5/fts5_hash.c"
-    "ext/fts5/fts5_index.c"
-    "ext/fts5/fts5_main.c"
-    "ext/fts5/fts5_storage.c"
-    "ext/fts5/fts5_tokenize.c"
-    "ext/fts5/fts5_unicode2.c"
-    "ext/fts5/fts5_varint.c"
-    "ext/fts5/fts5_vocab.c"
-    "ext/fts5/tool/mkfts5c.tcl")
-
-add_custom_command(
-    OUTPUT
-        "${SQLITE_GENERATED_DIR}/fts5.c"
-        "${SQLITE_GENERATED_DIR}/fts5.h"
-    COMMAND sqlite_jimsh
-        "${SQLITE_GENERATED_DIR}/mkfts5c-cmake.tcl"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/ext/fts5/fts5.h"
-        "${SQLITE_GENERATED_DIR}/fts5.h"
-    DEPENDS
-        sqlite_jimsh
-        "${SQLITE_GENERATED_DIR}/fts5parse.c"
-        "${SQLITE_GENERATED_DIR}/fts5parse.h"
-        ${_sqlite_fts5_sources}
-    WORKING_DIRECTORY "${SQLITE_GENERATED_DIR}"
-    VERBATIM)
-
-add_custom_command(
-    OUTPUT "${SQLITE_GENERATED_DIR}/sqlite3.c"
-    COMMAND "${CMAKE_COMMAND}"
-        -DSQLITE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-        -DSQLITE_BINARY_DIR=${SQLITE_GENERATED_DIR}
-        -DSQLITE_TSRC_DIR=${SQLITE_TSRC_DIR}
-        -DSQLITE_JIMSH=$<TARGET_FILE:sqlite_jimsh>
-        -DSQLITE_SRC_VERIFY=$<TARGET_FILE:sqlite_src_verify>
-        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateAmalgamation.cmake"
-    DEPENDS
-        sqlite_jimsh
-        sqlite_src_verify
-        "${SQLITE_GENERATED_DIR}/sqlite3.h"
-        "${SQLITE_GENERATED_DIR}/parse.c"
-        "${SQLITE_GENERATED_DIR}/parse.h"
-        "${SQLITE_GENERATED_DIR}/opcodes.c"
-        "${SQLITE_GENERATED_DIR}/opcodes.h"
-        "${SQLITE_GENERATED_DIR}/pragma.h"
-        "${SQLITE_GENERATED_DIR}/ctime.c"
-        "${SQLITE_GENERATED_DIR}/keywordhash.h"
-        "${SQLITE_GENERATED_DIR}/fts5.c"
-        "${SQLITE_GENERATED_DIR}/fts5.h"
-        "tool/mksqlite3c.tcl"
-        "tool/vdbe-compress.tcl"
-    VERBATIM)
 
 add_custom_target(sqlite_amalgamation
     DEPENDS
-        "${SQLITE_GENERATED_DIR}/sqlite3.c"
-        "${SQLITE_GENERATED_DIR}/sqlite3.h")
-set(SQLITE_AMALGAMATION_C "${SQLITE_GENERATED_DIR}/sqlite3.c")
-set(SQLITE_AMALGAMATION_H "${SQLITE_GENERATED_DIR}/sqlite3.h")
-endif()
+        "${SQLITE_AMALGAMATION_C}"
+        "${SQLITE_AMALGAMATION_H}")
 
 function(_sqlite_apply_library_settings target_name)
     add_dependencies("${target_name}" sqlite_amalgamation)
@@ -299,7 +75,6 @@ function(_sqlite_apply_library_settings target_name)
     target_include_directories("${target_name}"
         PUBLIC
             "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
-            "$<BUILD_INTERFACE:${SQLITE_GENERATED_DIR}>"
             "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 
     target_compile_definitions("${target_name}"
@@ -377,14 +152,4 @@ if(SQLITE_BUILD_SHARED)
         target_compile_definitions(sqlite3 PRIVATE "SQLITE_API=__declspec(dllexport)")
     endif()
     set_target_properties(sqlite3 PROPERTIES OUTPUT_NAME "sqlite3")
-endif()
-
-if(SQLITE_BUILD_TOOLS AND NOT SQLITE_USE_PREGENERATED)
-    add_custom_target(sqlite_tools
-        DEPENDS
-            sqlite_jimsh
-            sqlite_lemon
-            sqlite_mkkeywordhash
-            sqlite_mksourceid
-            sqlite_src_verify)
 endif()
