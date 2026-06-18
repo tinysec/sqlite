@@ -1,0 +1,239 @@
+name: CI
+
+# Matrix builds SQLite libraries only: static lib + DLL/shared library.
+# The source tree currently carries SQLite 3.53.2. Add another entry to each
+# matrix when another source/version line is added.
+#
+# Release model:
+#   - immutable per-build release: v3.53.2.<github-run-number>
+#   - rolling alias release:       v3.53.2
+# The rolling release is refreshed on every successful run and uses stable asset
+# names without the build number.
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SQLITE_DEFAULT_VERSION: "3.53.2"
+
+jobs:
+  build-linux:
+    name: linux-${{ matrix.sqlite_base }}-${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { sqlite_base: "3.53.2", arch: x64, bits: "",     extra_packages: "" }
+          - { sqlite_base: "3.53.2", arch: x86, bits: "-m32", extra_packages: "gcc-multilib" }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install 32-bit toolchain
+        if: matrix.extra_packages != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.extra_packages }}
+
+      - name: Configure and build
+        run: |
+          set -euo pipefail
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSQLITE_BUILD_STATIC=ON \
+            -DSQLITE_BUILD_SHARED=ON \
+            -DSQLITE_UPSTREAM_VERSION="${{ matrix.sqlite_base }}" \
+            -DSQLITE_BUILD_NUMBER="${GITHUB_RUN_NUMBER}" \
+            "-DCMAKE_C_FLAGS=${{ matrix.bits }}"
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          version="v${{ matrix.sqlite_base }}.${GITHUB_RUN_NUMBER}"
+          arch="${{ matrix.arch }}"
+
+          mkdir -p pkg/lib pkg/include
+          find build -name 'libsqlite3.so*' -exec cp -a {} pkg/lib/ \;
+          find build -name 'libsqlite3_static.a' -exec cp {} pkg/lib/ \;
+          cp sqlite3.h src/sqlite3ext.h pkg/include/
+          cp LICENSE.md pkg/
+          tar -czf "sqlite-${version}-linux-${arch}.tar.gz" -C pkg .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-${{ matrix.sqlite_base }}-linux-${{ matrix.arch }}
+          path: sqlite-*.tar.gz
+
+  build-msvc:
+    name: msvc-${{ matrix.sqlite_base }}-${{ matrix.arch }}-${{ matrix.crt }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { sqlite_base: "3.53.2", arch: x64, cmake_platform: x64,   runtime: MultiThreaded,    crt: mt }
+          - { sqlite_base: "3.53.2", arch: x64, cmake_platform: x64,   runtime: MultiThreadedDLL, crt: md }
+          - { sqlite_base: "3.53.2", arch: x86, cmake_platform: Win32, runtime: MultiThreaded,    crt: mt }
+          - { sqlite_base: "3.53.2", arch: x86, cmake_platform: Win32, runtime: MultiThreadedDLL, crt: md }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A "${{ matrix.cmake_platform }}" `
+            -DSQLITE_BUILD_STATIC=ON `
+            -DSQLITE_BUILD_SHARED=ON `
+            -DSQLITE_UPSTREAM_VERSION="${{ matrix.sqlite_base }}" `
+            -DSQLITE_BUILD_NUMBER="${env:GITHUB_RUN_NUMBER}" `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY="${{ matrix.runtime }}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "v${{ matrix.sqlite_base }}.${env:GITHUB_RUN_NUMBER}"
+          $arch = "${{ matrix.arch }}"
+          $crt = "${{ matrix.crt }}"
+
+          New-Item -ItemType Directory -Force pkg/bin, pkg/lib, pkg/include | Out-Null
+          Copy-Item build/Release/sqlite3.dll pkg/bin/
+          Copy-Item build/Release/sqlite3.lib pkg/lib/sqlite3_import.lib
+          Copy-Item build/Release/sqlite3_static.lib pkg/lib/
+          Copy-Item sqlite3.h, src/sqlite3ext.h pkg/include/
+          Copy-Item LICENSE.md pkg/
+          Compress-Archive -Path pkg/* -DestinationPath "sqlite-$version-msvc-$arch-$crt.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-${{ matrix.sqlite_base }}-msvc-${{ matrix.arch }}-${{ matrix.crt }}
+          path: sqlite-*.zip
+
+  build-wdk7:
+    name: wdk7-${{ matrix.sqlite_base }}-${{ matrix.arch }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { sqlite_base: "3.53.2", arch: x64, wdk_arch: amd64 }
+          - { sqlite_base: "3.53.2", arch: x86, wdk_arch: i386 }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup WDK7
+        id: wdk7
+        uses: tinysec/setup-wdk7@v1
+
+      - name: Configure and build
+        shell: cmd
+        run: |
+          @echo off
+          if not "${{ steps.wdk7.outputs.found }}"=="true" (
+            echo setup-wdk7 did not prepare WDK7.
+            exit /b 1
+          )
+          cmake -S . -B build -G "${{ steps.wdk7.outputs.cmake-generator }}" ^
+            -DCMAKE_TOOLCHAIN_FILE="${{ steps.wdk7.outputs.toolchain-file }}" ^
+            -DWDK7_ARCH=${{ matrix.wdk_arch }} ^
+            -DWDK7_DEFAULT_MODE=USER ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DSQLITE_BUILD_STATIC=ON ^
+            -DSQLITE_BUILD_SHARED=ON ^
+            -DSQLITE_UPSTREAM_VERSION=${{ matrix.sqlite_base }} ^
+            -DSQLITE_BUILD_NUMBER=%GITHUB_RUN_NUMBER%
+          if errorlevel 1 exit /b 1
+          cmake --build build
+          if errorlevel 1 exit /b 1
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "v${{ matrix.sqlite_base }}.${env:GITHUB_RUN_NUMBER}"
+          $arch = "${{ matrix.arch }}"
+
+          New-Item -ItemType Directory -Force pkg/bin, pkg/lib, pkg/include | Out-Null
+          Copy-Item build/sqlite3.dll pkg/bin/
+          Copy-Item build/sqlite3.lib pkg/lib/sqlite3_import.lib
+          Copy-Item build/sqlite3_static.lib pkg/lib/
+          Copy-Item sqlite3.h, src/sqlite3ext.h pkg/include/
+          Copy-Item LICENSE.md pkg/
+          Compress-Archive -Path pkg/* -DestinationPath "sqlite-$version-wdk7-$arch.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-${{ matrix.sqlite_base }}-wdk7-${{ matrix.arch }}
+          path: sqlite-*.zip
+
+  release:
+    needs: [ build-linux, build-msvc, build-wdk7 ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Publish versioned releases and rolling alias releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t versions < <(
+            find dist -type f -printf '%f\n' |
+              sed -n 's/^sqlite-\(v[0-9][0-9.]*\)-.*/\1/p' |
+              sort -u
+          )
+
+          for version in "${versions[@]}"; do
+            alias="$(echo "${version}" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+$/v\1/')"
+            base="${alias#v}"
+
+            mapfile -t assets < <(find dist -type f -name "sqlite-${version}-*" | sort)
+
+            gh release create "${version}" \
+              --target "${GITHUB_SHA}" \
+              --title "${version}" \
+              --notes "Automated SQLite ${base} build ${GITHUB_RUN_NUMBER}: Linux, modern Visual Studio, and WDK7 libraries." \
+              --latest \
+              "${assets[@]}"
+
+            git tag --force "${alias}" "${GITHUB_SHA}"
+            git push --force origin "refs/tags/${alias}"
+
+            rm -rf alias-assets
+            mkdir -p alias-assets
+            for f in "${assets[@]}"; do
+              name="$(basename "${f}")"
+              cp "${f}" "alias-assets/sqlite-${name#sqlite-${version}-}"
+            done
+
+            gh release delete "${alias}" --yes --cleanup-tag=false || true
+            mapfile -t alias_assets < <(find alias-assets -type f | sort)
+            gh release create "${alias}" \
+              --target "${GITHUB_SHA}" \
+              --title "${alias} (latest: ${version})" \
+              --notes "Rolling release tracking the latest ${base} build (currently ${version}). Asset names are stable across builds." \
+              --latest=false \
+              "${alias_assets[@]}"
+          done
