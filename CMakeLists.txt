@@ -29,8 +29,7 @@ project(sqlite VERSION "${SQLITE_VERSION}" LANGUAGES C)
 # add_subdirectory), so it exposes ordinary CMake targets directly. It does not
 # generate install()/find_package() package metadata.
 
-option(SQLITE_BUILD_STATIC "Build the sqlite3 static library" ON)
-option(SQLITE_BUILD_SHARED "Build the sqlite3 DLL and import library" ON)
+option(SQLITE_BUILD_SHARED "Also build the sqlite3 DLL/shared library" OFF)
 option(SQLITE_ENABLE_FTS5 "Enable FTS5 in the amalgamation build" ON)
 option(SQLITE_ENABLE_RTREE "Enable RTree in the amalgamation build" ON)
 option(SQLITE_ENABLE_SESSION "Enable session extension APIs" ON)
@@ -57,10 +56,6 @@ option(SQLITE_KERNEL_MODE
 
 if(SQLITE_KERNEL_MODE AND NOT WDK7)
     message(FATAL_ERROR "SQLITE_KERNEL_MODE is currently supported only with cmake/wdk7.cmake")
-endif()
-
-if(NOT SQLITE_BUILD_STATIC AND NOT SQLITE_BUILD_SHARED)
-    message(FATAL_ERROR "At least one of SQLITE_BUILD_STATIC or SQLITE_BUILD_SHARED must be ON")
 endif()
 
 set(SQLITE_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -362,29 +357,26 @@ function(_sqlite_apply_library_settings target_name)
         POSITION_INDEPENDENT_CODE ON)
 endfunction()
 
-if(SQLITE_BUILD_STATIC)
-    add_library(sqlite3_static STATIC
-        "${SQLITE_AMALGAMATION_C}"
-        "${SQLITE_AMALGAMATION_H}"
-        "src/sqlite3ext.h")
-    add_library(sqlite::sqlite3_static ALIAS sqlite3_static)
-    _sqlite_apply_library_settings(sqlite3_static)
-    set_target_properties(sqlite3_static PROPERTIES OUTPUT_NAME "sqlite3_static")
-endif()
+add_library(sqlite3_static STATIC
+    "${SQLITE_AMALGAMATION_C}"
+    "${SQLITE_AMALGAMATION_H}"
+    "src/sqlite3ext.h")
+add_library(SQLite::SQLite3 ALIAS sqlite3_static)
+add_library(sqlite::sqlite3 ALIAS sqlite3_static)
+add_library(sqlite::sqlite3_static ALIAS sqlite3_static)
+_sqlite_apply_library_settings(sqlite3_static)
+set_target_properties(sqlite3_static PROPERTIES OUTPUT_NAME "sqlite3_static")
 
 if(SQLITE_BUILD_SHARED)
     add_library(sqlite3 SHARED
         "${SQLITE_AMALGAMATION_C}"
         "${SQLITE_AMALGAMATION_H}"
         "src/sqlite3ext.h")
-    add_library(SQLite::SQLite3 ALIAS sqlite3)
-    add_library(sqlite::sqlite3 ALIAS sqlite3)
     _sqlite_apply_library_settings(sqlite3)
-    target_compile_definitions(sqlite3 PRIVATE "SQLITE_API=__declspec(dllexport)")
+    if(WIN32)
+        target_compile_definitions(sqlite3 PRIVATE "SQLITE_API=__declspec(dllexport)")
+    endif()
     set_target_properties(sqlite3 PROPERTIES OUTPUT_NAME "sqlite3")
-elseif(SQLITE_BUILD_STATIC)
-    add_library(SQLite::SQLite3 ALIAS sqlite3_static)
-    add_library(sqlite::sqlite3 ALIAS sqlite3_static)
 endif()
 
 if(SQLITE_BUILD_TOOLS AND NOT SQLITE_USE_PREGENERATED)

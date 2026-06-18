@@ -35,18 +35,17 @@ When added to a CMake project, the repository exposes these targets:
 
 | Target | Description |
 | --- | --- |
-| `SQLite::SQLite3` | Preferred target. Uses the shared library when enabled, otherwise static. |
+| `SQLite::SQLite3` | Preferred target. Static library by default. |
 | `sqlite::sqlite3` | Lowercase alias for `SQLite::SQLite3`. |
 | `sqlite::sqlite3_static` | Static library target. |
 | `sqlite3` | Shared library target when `SQLITE_BUILD_SHARED=ON`. |
-| `sqlite3_static` | Static library target when `SQLITE_BUILD_STATIC=ON`. |
+| `sqlite3_static` | Static library target, always built. |
 
 Useful options:
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `SQLITE_BUILD_STATIC` | `ON` | Build `sqlite3_static`. |
-| `SQLITE_BUILD_SHARED` | `ON` | Build `sqlite3` DLL/shared library. |
+| `SQLITE_BUILD_SHARED` | `OFF` | Also build `sqlite3` DLL/shared library. |
 | `SQLITE_BUILD_TOOLS` | `ON` | Build source-generation tools when pregenerated sources are not used. |
 | `SQLITE_USE_PREGENERATED` | `ON` when `sqlite3.c` and `sqlite3.h` exist | Use checked-in amalgamation files. |
 | `SQLITE_BUILD_NUMBER` | `0` | Forms `3.53.2.<buildnumber>`. |
@@ -65,7 +64,6 @@ FetchContent_Declare(
     GIT_TAG v3.53.2
 )
 
-set(SQLITE_BUILD_STATIC ON CACHE BOOL "" FORCE)
 set(SQLITE_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(sqlite)
@@ -99,7 +97,6 @@ cmake -S . -B build-wdk7 -G "NMake Makefiles" ^
   -DCMAKE_TOOLCHAIN_FILE=D:\path\to\sqlite\cmake\wdk7.cmake ^
   -DWDK7_ARCH=amd64 ^
   -DWDK7_DEFAULT_MODE=USER ^
-  -DSQLITE_BUILD_STATIC=ON ^
   -DSQLITE_BUILD_SHARED=ON ^
   -DCMAKE_BUILD_TYPE=Release
 
@@ -150,7 +147,6 @@ Visual Studio:
 
 ```bat
 cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64 ^
-  -DSQLITE_BUILD_STATIC=ON ^
   -DSQLITE_BUILD_SHARED=ON
 
 cmake --build build-msvc --config Release --parallel
@@ -161,7 +157,6 @@ Linux:
 ```sh
 cmake -S . -B build-linux \
   -DCMAKE_BUILD_TYPE=Release \
-  -DSQLITE_BUILD_STATIC=ON \
   -DSQLITE_BUILD_SHARED=ON
 
 cmake --build build-linux --parallel
