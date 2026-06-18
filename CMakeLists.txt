@@ -74,8 +74,7 @@ function(_sqlite_apply_library_settings target_name)
 
     target_include_directories("${target_name}"
         PUBLIC
-            "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
-            "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
+            "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>")
 
     target_compile_definitions("${target_name}"
         PUBLIC
@@ -135,7 +134,7 @@ endfunction()
 add_library(sqlite3_static STATIC
     "${SQLITE_AMALGAMATION_C}"
     "${SQLITE_AMALGAMATION_H}"
-    "src/sqlite3ext.h")
+    "sqlite3ext.h")
 add_library(SQLite::SQLite3 ALIAS sqlite3_static)
 add_library(sqlite::sqlite3 ALIAS sqlite3_static)
 add_library(sqlite::sqlite3_static ALIAS sqlite3_static)
@@ -146,7 +145,7 @@ if(SQLITE_BUILD_SHARED)
     add_library(sqlite3 SHARED
         "${SQLITE_AMALGAMATION_C}"
         "${SQLITE_AMALGAMATION_H}"
-        "src/sqlite3ext.h")
+        "sqlite3ext.h")
     _sqlite_apply_library_settings(sqlite3)
     if(WIN32)
         target_compile_definitions(sqlite3 PRIVATE "SQLITE_API=__declspec(dllexport)")

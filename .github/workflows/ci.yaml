@@ -61,7 +61,7 @@ jobs:
           mkdir -p pkg/lib pkg/include
           find build -name 'libsqlite3.so*' -exec cp -a {} pkg/lib/ \;
           find build -name 'libsqlite3_static.a' -exec cp {} pkg/lib/ \;
-          cp sqlite3.h src/sqlite3ext.h pkg/include/
+          cp sqlite3.h sqlite3ext.h pkg/include/
           cp LICENSE.md pkg/
           tar -czf "sqlite-${version}-linux-${arch}.tar.gz" -C pkg .
 
@@ -109,7 +109,7 @@ jobs:
           Copy-Item build/Release/sqlite3.dll pkg/bin/
           Copy-Item build/Release/sqlite3.lib pkg/lib/sqlite3_import.lib
           Copy-Item build/Release/sqlite3_static.lib pkg/lib/
-          Copy-Item sqlite3.h, src/sqlite3ext.h pkg/include/
+          Copy-Item sqlite3.h, sqlite3ext.h pkg/include/
           Copy-Item LICENSE.md pkg/
           Compress-Archive -Path pkg/* -DestinationPath "sqlite-$version-msvc-$arch-$crt.zip"
 
@@ -166,7 +166,7 @@ jobs:
           Copy-Item build/sqlite3.dll pkg/bin/
           Copy-Item build/sqlite3.lib pkg/lib/sqlite3_import.lib
           Copy-Item build/sqlite3_static.lib pkg/lib/
-          Copy-Item sqlite3.h, src/sqlite3ext.h pkg/include/
+          Copy-Item sqlite3.h, sqlite3ext.h pkg/include/
           Copy-Item LICENSE.md pkg/
           Compress-Archive -Path pkg/* -DestinationPath "sqlite-$version-wdk7-$arch.zip"
 
