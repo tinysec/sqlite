@@ -54,7 +54,7 @@ option(SQLITE_KERNEL_MODE
     "${_sqlite_kernel_mode_default}")
 
 if(SQLITE_KERNEL_MODE AND NOT WDK7)
-    message(FATAL_ERROR "SQLITE_KERNEL_MODE is currently supported only with cmake/wdk7.cmake")
+    message(FATAL_ERROR "SQLITE_KERNEL_MODE requires the WDK7 CMake toolchain from tinysec/setup-wdk7")
 endif()
 
 set(SQLITE_AMALGAMATION_C "${CMAKE_CURRENT_SOURCE_DIR}/sqlite3.c")
@@ -102,8 +102,6 @@ function(_sqlite_apply_library_settings target_name)
     endif()
 
     if(WDK7 AND TARGET WDK7::User AND NOT _sqlite_wdk7_default_mode_is_kernel)
-        target_include_directories("${target_name}" BEFORE PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/include/wdk7-compat")
         target_compile_definitions("${target_name}" PRIVATE SQLITE_DISABLE_INTRINSIC=1)
         target_compile_definitions("${target_name}" PRIVATE SQLITE_OMIT_LOCALTIME=1)
         target_link_libraries("${target_name}" PUBLIC WDK7::User)
@@ -120,8 +118,6 @@ function(_sqlite_apply_library_settings target_name)
                 _KERNEL_MODE)
 
         if(TARGET WDK7::Kernel AND NOT _sqlite_wdk7_default_mode_is_kernel)
-            target_include_directories("${target_name}" BEFORE PRIVATE
-                "${CMAKE_CURRENT_SOURCE_DIR}/include/wdk7-compat")
             target_link_libraries("${target_name}" PUBLIC WDK7::Kernel)
         endif()
     endif()

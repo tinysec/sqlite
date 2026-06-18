@@ -87,14 +87,12 @@ FetchContent_Declare(
 
 ## Use With WDK7
 
-CMake loads the toolchain file before `FetchContent` downloads dependencies, so
-the WDK7 toolchain file must be available locally before configure starts. You
-can copy `cmake/wdk7.cmake` into your project or reference it from an existing
-checkout.
+Use `tinysec/setup-wdk7@v1` in CI. The action exposes the WDK7 CMake toolchain
+and private compatibility headers required by the legacy compiler.
 
 ```bat
 cmake -S . -B build-wdk7 -G "NMake Makefiles" ^
-  -DCMAKE_TOOLCHAIN_FILE=D:\path\to\sqlite\cmake\wdk7.cmake ^
+  -DCMAKE_TOOLCHAIN_FILE=%WDK7_CMAKE_TOOLCHAIN_FILE% ^
   -DWDK7_ARCH=amd64 ^
   -DWDK7_DEFAULT_MODE=USER ^
   -DSQLITE_BUILD_SHARED=ON ^
@@ -166,7 +164,7 @@ WDK7:
 
 ```bat
 cmake -S . -B build-wdk7 -G "NMake Makefiles" ^
-  -DCMAKE_TOOLCHAIN_FILE=cmake\wdk7.cmake ^
+  -DCMAKE_TOOLCHAIN_FILE=%WDK7_CMAKE_TOOLCHAIN_FILE% ^
   -DWDK7_ARCH=amd64 ^
   -DWDK7_DEFAULT_MODE=USER ^
   -DCMAKE_BUILD_TYPE=Release
