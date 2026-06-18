@@ -1,7 +1,10 @@
 #ifndef SQLITE_WDK7_COMPAT_STDINT_H
 #define SQLITE_WDK7_COMPAT_STDINT_H
 
-#if defined(_MSC_VER) && _MSC_VER < 1600
+#if !defined(_MSC_VER) || _MSC_VER >= 1600
+#error "This WDK7 compatibility stdint.h is only for MSVC before 1600"
+#endif
+
 typedef signed char int8_t;
 typedef unsigned char uint8_t;
 typedef short int16_t;
@@ -33,9 +36,6 @@ typedef unsigned __int64 uintptr_t;
 #else
 typedef int intptr_t;
 typedef unsigned int uintptr_t;
-#endif
-#else
-#include_next <stdint.h>
 #endif
 
 #endif

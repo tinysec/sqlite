@@ -103,7 +103,7 @@ function(_sqlite_apply_library_settings target_name)
 
     if(WDK7 AND TARGET WDK7::User AND NOT _sqlite_wdk7_default_mode_is_kernel)
         target_include_directories("${target_name}" BEFORE PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/wdk7-compat/include")
+            "${CMAKE_CURRENT_SOURCE_DIR}/include/wdk7-compat")
         target_compile_definitions("${target_name}" PRIVATE SQLITE_DISABLE_INTRINSIC=1)
         target_compile_definitions("${target_name}" PRIVATE SQLITE_OMIT_LOCALTIME=1)
         target_link_libraries("${target_name}" PUBLIC WDK7::User)
@@ -121,7 +121,7 @@ function(_sqlite_apply_library_settings target_name)
 
         if(TARGET WDK7::Kernel AND NOT _sqlite_wdk7_default_mode_is_kernel)
             target_include_directories("${target_name}" BEFORE PRIVATE
-                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/wdk7-compat/include")
+                "${CMAKE_CURRENT_SOURCE_DIR}/include/wdk7-compat")
             target_link_libraries("${target_name}" PUBLIC WDK7::Kernel)
         endif()
     endif()
